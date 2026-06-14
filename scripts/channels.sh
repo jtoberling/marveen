@@ -33,8 +33,11 @@ if [ -f "$INSTALL_DIR/.env" ]; then
   _oauth="$(grep -E '^CLAUDE_CODE_OAUTH_TOKEN=' "$INSTALL_DIR/.env" | head -1 | cut -d= -f2-)"
   [ -n "$_oauth" ] && export CLAUDE_CODE_OAUTH_TOKEN="$_oauth"
   unset _api_key _oauth
+  _cli="$(grep -E '^CLI_COMMAND=' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'")"
+  [ -n "$_cli" ] && CLI_COMMAND="$_cli"
 fi
 CHANNEL_PROVIDER="${CHANNEL_PROVIDER:-telegram}"
+CLI_COMMAND="${CLI_COMMAND:-qwen}"
 SESSION="${MAIN_AGENT_ID:-marveen}-channels"
 
 # Resolve plugin ID from provider
@@ -75,7 +78,7 @@ unset TELEGRAM_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN DISCORD_BOT_TOKEN
 # scrub the env var before any tmux command runs.
 unset TMUX
 
-export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Root VPS / container: Claude Code refuses --dangerously-skip-permissions when
 # running as uid 0 ("cannot be used with root/sudo privileges"), so the tmux
@@ -84,9 +87,9 @@ export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$HO
 # documented sandbox escape hatch. Harmless for non-root (guarded by uid check).
 [ "$(id -u)" = "0" ] && export IS_SANDBOX=1
 
-CLAUDE="$(command -v claude)"
+CLAUDE="$(command -v "$CLI_COMMAND")"
 TMUX="$(command -v tmux)"
-[ -z "$CLAUDE" ] && echo "ERROR: claude not found on PATH" >&2 && exit 1
+[ -z "$CLAUDE" ] && echo "ERROR: $CLI_COMMAND not found on PATH" >&2 && exit 1
 [ -z "$TMUX" ]   && echo "ERROR: tmux not found on PATH" >&2 && exit 1
 
 # Read the main agent's default model from .claude/settings.json so we can
@@ -183,8 +186,16 @@ fi
 # the cwd-based project dir may contain the user's own CLI sessions, and
 # resuming one of those loses the --channels activation state, causing
 # "Channel notifications skipped: server not in --channels list" errors.
+if [ "$(basename "$CLI_COMMAND")" = "qwen" ] || [ "$(basename "$CLI_COMMAND")" = "qwen-code" ]; then
+  SKIP_FLAG="--yolo"
+  CHANNEL_FLAG=""
+else
+  SKIP_FLAG="--dangerously-skip-permissions"
+  CHANNEL_FLAG="--channels plugin:${PLUGIN_ID}"
+fi
+
 $TMUX new-session -d -s "$SESSION" -c "$INSTALL_DIR" \
-  "$CLAUDE --dangerously-skip-permissions ${MODEL_FLAG}--channels plugin:${PLUGIN_ID}"
+  "$CLAUDE $SKIP_FLAG ${MODEL_FLAG}$CHANNEL_FLAG"
 
 # Session startup guard: a Claude Code first-run dialogusait auto-accept-eljuk
 # kulonben a headless session orokre parkolna a prompton es a Telegram plugin

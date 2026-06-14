@@ -47,7 +47,7 @@ export type PaneState = 'idle' | 'busy' | 'typing' | 'unknown' | 'error'
 //       happens to contain "bypass permissions on · 1 shell" verbatim
 //       (an echoed log line, a quoted message, etc.) which would
 //       otherwise be misread as idle.
-const IDLE_FOOTER_RX = /bypass permissions on(?: \(shift\+tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
+const IDLE_FOOTER_RX = /(?:bypass permissions on|YOLO mode)(?: \(shift\+tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
 
 // Positive busy signals. ANY match anywhere in the pane means the turn
 // is mid-flight, even if the footer looks idle for a frame.
@@ -178,7 +178,7 @@ const BOX_SEP_RX = /^─{10,}/
 // space and then a non-whitespace character means the user (or a
 // send-keys that didn't submit) parked text there. Single-line match
 // ([ \t] not \s) to avoid crossing into the next line.
-const PARKED_INPUT_RX = /❯[ \t]+\S/
+const PARKED_INPUT_RX = /[❯>][ \t]+\S/
 
 // Persistent Anthropic thinking-block API error. When an assistant turn
 // ends with a 400 about thinking/redacted_thinking blocks that "cannot

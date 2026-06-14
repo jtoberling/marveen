@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { execSync, execFileSync, spawn } from 'node:child_process'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
-import { MAIN_AGENT_ID, BOT_NAME, CHANNEL_PROVIDER, PROJECT_ROOT, RESPAWN_ENABLED } from '../config.js'
+import { MAIN_AGENT_ID, BOT_NAME, CHANNEL_PROVIDER, PROJECT_ROOT, RESPAWN_ENABLED, CLI_COMMAND } from '../config.js'
 import { agentDir, listAgentNames, readAgentChannelProvider } from './agent-config.js'
 import {
   agentHasChannel,
@@ -39,7 +39,7 @@ import { getClaudePidForSession, hasChannelPluginAlive } from '../channel-coordi
 import { getDesiredAgents } from './agent-desired-state.js'
 
 const TMUX = resolveFromPath('tmux')
-const CLAUDE = resolveFromPath('claude')
+const CLAUDE = resolveFromPath(CLI_COMMAND)
 
 // How long the agent's claude process has been running. Returns -1 when it
 // cannot be determined, which the restart policy treats as "do not restart".
@@ -309,11 +309,11 @@ export function buildMainSessionRespawnCmd(opts: {
     'export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"',
     '&&', opts.claudePath,
     ...(opts.continueSession ? ['--continue'] : []),
-    '--dangerously-skip-permissions',
+    ...((opts.claudePath || '').includes('qwen') ? ['--yolo'] : ['--dangerously-skip-permissions']),
     // Single-quote the model id so a value like `claude-opus-4-8[1m]` is not
     // glob-expanded by the shell that tmux respawn-pane spawns the command in.
     ...(opts.model ? ['--model', `'${opts.model}'`] : []),
-    `--channels plugin:${opts.pluginId}`,
+    ...((opts.claudePath || '').includes('qwen') ? [] : [`--channels plugin:${opts.pluginId}`]),
   ].join(' ')
 }
 

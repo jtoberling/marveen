@@ -353,7 +353,7 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
         logger.warn({ err, name }, 'Could not scope channel plugins for sub-agent')
       }
     }
-    const skipFlag = profile.permissionMode === 'strict' ? '' : '--dangerously-skip-permissions '
+    const skipFlag = profile.permissionMode === 'strict' ? '' : (isQwen ? '--yolo ' : '--dangerously-skip-permissions ')
     // Optional per-agent CLAUDE_CONFIG_DIR (alternate Claude Code config dir,
     // e.g. for routing this agent to a separate Anthropic login). When the
     // agent-config field is missing or blank, claudeConfigDir is null and we
@@ -383,7 +383,7 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     const channelSetup = hasChannel
       ? `export ${stateEnvVar}="${agentChannelDir}"${auditLogEnv} && `
       : ''
-    const channelFlag = hasChannel ? `--channels plugin:${provider.pluginId}` : ''
+    const channelFlag = (hasChannel && !isQwen) ? `--channels plugin:${provider.pluginId}` : ''
     // Single-quote `${model}` so values like `claude-opus-4-8[1m]` (1M-context
     // suffix) are not glob-expanded by the shell that tmux spawns the command in.
     const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}--model '${model}' ${localFlags}${channelFlag}`.trimEnd()

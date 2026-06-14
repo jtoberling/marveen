@@ -82,21 +82,40 @@ function buildProcessLockContext(): ProcessLockContext {
       // physical lines; such rows are dropped. Not a practical concern for
       // node/tsx invocations, but worth noting.
       try {
-        const raw = execFileSync('/bin/ps', ['-Ao', 'pid=,uid=,args='], { timeout: 3000, encoding: 'utf-8' })
+        const raw = execFileSync('/bin/ps', ['-Ao', 'pid=,ppid=,uid=,args='], { timeout: 3000, encoding: 'utf-8' })
         const out: number[] = []
+        const parentMap = new Map<number, number>()
+        const rows: { pid: number; ppid: number; uid: number; argv: string }[] = []
+
         for (const line of raw.split('\n')) {
           const trimmed = line.trimStart()
           if (!trimmed) continue
-          const m = trimmed.match(/^(\d+)\s+(\d+)\s+(.*)$/)
+          const m = trimmed.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/)
           if (!m) continue
           const pid = parseInt(m[1], 10)
-          const rowUid = parseInt(m[2], 10)
-          const argv = m[3]
+          const ppid = parseInt(m[2], 10)
+          const rowUid = parseInt(m[3], 10)
+          const argv = m[4]
           if (!Number.isFinite(pid) || pid <= 0) continue
-          if (pid === process.pid) continue
-          if (uid != null && rowUid !== uid) continue
-          if (!pattern.test(argv)) continue
-          out.push(pid)
+          parentMap.set(pid, ppid)
+          rows.push({ pid, ppid, uid: rowUid, argv })
+        }
+
+        const ancestors = new Set<number>()
+        let current = process.pid
+        while (current && current > 0) {
+          const p = parentMap.get(current)
+          if (!p || p <= 0 || ancestors.has(p)) break
+          ancestors.add(p)
+          current = p
+        }
+
+        for (const row of rows) {
+          if (row.pid === process.pid) continue
+          if (ancestors.has(row.pid)) continue
+          if (uid != null && row.uid !== uid) continue
+          if (!pattern.test(row.argv)) continue
+          out.push(row.pid)
         }
         return out
       } catch {

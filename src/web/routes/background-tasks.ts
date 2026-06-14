@@ -5,13 +5,14 @@ import {
   getBackgroundTask, getRunningBackgroundTasks, markOrphanedTasksFailed,
   type BackgroundTask,
 } from '../../db.js'
+import { CLI_COMMAND } from '../../config.js'
 import { resolveFromPath } from '../../platform.js'
 import { logger } from '../../logger.js'
 import { readBody, json } from '../http-helpers.js'
 import type { RouteContext } from './types.js'
 
 const TMUX = resolveFromPath('tmux')
-const CLAUDE = resolveFromPath('claude')
+const CLAUDE = resolveFromPath(CLI_COMMAND)
 const MAX_CONCURRENT = 3
 const TIMEOUT_MS = 30 * 60 * 1000
 

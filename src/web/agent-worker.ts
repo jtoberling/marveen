@@ -333,7 +333,7 @@ export function startWorkerSession(): void {
     `export CLAUDE_CONFIG_DIR=${shArg(WORKER_CONFIG_DIR)}; ` +
     localEnv +
     `cd ${shArg(WORKER_HOME)} && ` +
-    `${CLAUDE_CLI} --dangerously-skip-permissions --model ${shArg(WORKER_MODEL)} ${localFlags}`
+    `${CLAUDE_CLI} ${(CLI_COMMAND || '').includes('qwen') ? '--yolo' : '--dangerously-skip-permissions'} --model ${shArg(WORKER_MODEL)} ${localFlags}`
   execFileSync(TMUX, ['new-session', '-d', '-s', WORKER_SESSION, '-c', WORKER_HOME, 'bash', '-lc', launch], { timeout: 8000 })
   logger.info({ session: WORKER_SESSION, cwd: WORKER_HOME }, 'agent-worker: launched interactive worker session')
 }

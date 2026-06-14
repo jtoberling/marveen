@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { userInfo } from 'node:os'
 import { execFileSync } from 'node:child_process'
-
+import { CLI_COMMAND } from '../config.js'
 // SSH + tmux transport primitives.
 //
 // Every tmux operation against a remote agent is routed through here so the
@@ -147,7 +147,8 @@ export function buildRemoteLaunchCommand(opts: {
 }): string {
   const path = 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"'
   const cont = opts.continue ? '--continue ' : ''
-  return `${path} && cd ${shQuote(opts.workdir)} && claude ${cont}--dangerously-skip-permissions --model ${shQuote(opts.model)}`
+  const skipFlag = (CLI_COMMAND || '').includes('qwen') ? '--yolo' : '--dangerously-skip-permissions'
+  return `${path} && cd ${shQuote(opts.workdir)} && claude ${cont}${skipFlag} --model ${shQuote(opts.model)}`
 }
 
 /**

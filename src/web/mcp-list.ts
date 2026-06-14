@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { resolveFromPath } from '../platform.js'
+import { CLI_COMMAND } from '../config.js'
 import { logger } from '../logger.js'
 import {
   applyRefreshOutcome,
@@ -10,7 +11,7 @@ import {
   type McpListEntry,
 } from '../mcp-list-parser.js'
 
-const CLAUDE = resolveFromPath('claude')
+const CLAUDE = resolveFromPath(CLI_COMMAND)
 
 function scrubPaths(msg: string): string {
   return scrubPathsBase(msg, homedir())
