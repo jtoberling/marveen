@@ -35,6 +35,10 @@ export const WEB_HOST = env['WEB_HOST'] ?? '127.0.0.1'
 export const DASHBOARD_PUBLIC_URL = env['DASHBOARD_PUBLIC_URL'] ?? ''
 export const OLLAMA_URL = env['OLLAMA_URL'] ?? 'http://localhost:11434'
 
+export const CLI_COMMAND = env['CLI_COMMAND'] ?? 'qwen'
+export const LOCAL_API_BASE_URL = env['LOCAL_API_BASE_URL'] ?? 'http://192.168.1.42:8000/v1'
+export const LOCAL_API_KEY = env['LOCAL_API_KEY'] ?? 'local'
+
 export const CHANNEL_PROVIDER: ChannelProviderType = getProviderType(env['CHANNEL_PROVIDER'])
 export const CHANNEL_TOKEN = getChannelToken(CHANNEL_PROVIDER, env)
 export const CHANNEL_CHAT_ID = getChannelChatId(CHANNEL_PROVIDER, env)

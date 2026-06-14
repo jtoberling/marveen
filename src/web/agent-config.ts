@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { PROJECT_ROOT, MAIN_AGENT_ID } from '../config.js'
+import { PROJECT_ROOT, MAIN_AGENT_ID, LOCAL_API_BASE_URL, LOCAL_API_KEY } from '../config.js'
 import { atomicWriteFileSync } from './atomic-write.js'
 import { safeJoin } from './sanitize.js'
 
@@ -373,4 +373,34 @@ export function isKnownAgent(name: string): boolean {
   } catch {
     return false
   }
+}
+
+export function resolveAgentApiUrl(rawJson: string): string | null {
+  try {
+    const config = JSON.parse(rawJson)
+    if (typeof config.apiUrl === 'string' && config.apiUrl.trim()) {
+      return config.apiUrl.trim()
+    }
+  } catch { /* fall through */ }
+  return LOCAL_API_BASE_URL || null
+}
+
+export function readAgentApiUrl(name: string): string | null {
+  const configPath = join(agentDir(name), 'agent-config.json')
+  return resolveAgentApiUrl(readFileOr(configPath, '{}'))
+}
+
+export function resolveAgentApiKey(rawJson: string): string | null {
+  try {
+    const config = JSON.parse(rawJson)
+    if (typeof config.apiKey === 'string' && config.apiKey.trim()) {
+      return config.apiKey.trim()
+    }
+  } catch { /* fall through */ }
+  return LOCAL_API_KEY || null
+}
+
+export function readAgentApiKey(name: string): string | null {
+  const configPath = join(agentDir(name), 'agent-config.json')
+  return resolveAgentApiKey(readFileOr(configPath, '{}'))
 }

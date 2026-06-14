@@ -5,7 +5,7 @@ import { homedir, userInfo } from 'node:os'
 import { createHash } from 'node:crypto'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
-import { PROJECT_ROOT } from '../config.js'
+import { PROJECT_ROOT, CLI_COMMAND, LOCAL_API_BASE_URL, LOCAL_API_KEY } from '../config.js'
 import {
   capturePane,
   isSessionReadyForPrompt,
@@ -37,6 +37,12 @@ import { readClaudeCodeOauthJson } from './claude-credentials.js'
 // =============================================================================
 
 const TMUX = resolveFromPath('tmux')
+let CLAUDE_CLI: string
+try {
+  CLAUDE_CLI = resolveFromPath(CLI_COMMAND)
+} catch {
+  CLAUDE_CLI = CLI_COMMAND
+}
 
 const WORKER_SESSION = process.env.MARVEEN_WORKER_SESSION || 'marveen-worker'
 // MUST be OUTSIDE PROJECT_ROOT so Claude Code's upward CLAUDE.md discovery never
@@ -311,12 +317,23 @@ function sleepMs(ms: number): Promise<void> {
 export function startWorkerSession(): void {
   if (workerSessionExists()) return
   ensureWorkerCwd()
+  
+  const isClaude = WORKER_MODEL.startsWith('claude-')
+  const isDeepseek = WORKER_MODEL.startsWith('deepseek-')
+  const isLocal = !isClaude && !isDeepseek
+
+  // If using qwen CLI, pass openai flags. If using claude CLI, fall back to Anthropic env variables.
+  const isQwen = CLI_COMMAND === 'qwen' || CLAUDE_CLI.endsWith('qwen')
+  const localEnv = (isLocal && !isQwen) ? `export ANTHROPIC_AUTH_TOKEN="${LOCAL_API_KEY}" && export ANTHROPIC_BASE_URL="${LOCAL_API_BASE_URL}" && ` : ''
+  const localFlags = (isLocal && isQwen) ? `--auth-type openai --openai-base-url "${LOCAL_API_BASE_URL}" --openai-api-key "${LOCAL_API_KEY}" ` : ''
+
   // Detached session; launch claude via a login shell so PATH + the config-dir
   // env are set. The model suffix ([1m]) is single-quoted so it is not globbed.
   const launch =
     `export CLAUDE_CONFIG_DIR=${shArg(WORKER_CONFIG_DIR)}; ` +
+    localEnv +
     `cd ${shArg(WORKER_HOME)} && ` +
-    `claude --dangerously-skip-permissions --model ${shArg(WORKER_MODEL)}`
+    `${CLAUDE_CLI} --dangerously-skip-permissions --model ${shArg(WORKER_MODEL)} ${localFlags}`
   execFileSync(TMUX, ['new-session', '-d', '-s', WORKER_SESSION, '-c', WORKER_HOME, 'bash', '-lc', launch], { timeout: 8000 })
   logger.info({ session: WORKER_SESSION, cwd: WORKER_HOME }, 'agent-worker: launched interactive worker session')
 }

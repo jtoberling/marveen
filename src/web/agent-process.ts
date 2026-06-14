@@ -2,7 +2,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync, execFileSync } from 'node:child_process'
-import { OLLAMA_URL } from '../config.js'
+import { CLI_COMMAND } from '../config.js'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
 import {
@@ -11,7 +11,7 @@ import {
   shouldClearTruncatedPreamble,
   detectsPastePlaceholder,
 } from '../pane-state.js'
-import { agentDir, readAgentModel, readAgentSecurityProfile, readAgentClaudeConfigDir, readAgentChannelProvider, readAgentAuthMode, readAgentDisplayName, readAgentRemoteConfig, readAgentRemoteHost } from './agent-config.js'
+import { agentDir, readAgentModel, readAgentSecurityProfile, readAgentClaudeConfigDir, readAgentChannelProvider, readAgentAuthMode, readAgentDisplayName, readAgentRemoteConfig, readAgentRemoteHost, readAgentApiUrl, readAgentApiKey } from './agent-config.js'
 import {
   buildTmuxInvocation,
   buildSshExec,
@@ -33,7 +33,12 @@ import { getSecret } from './vault.js'
 import { reapChannelOrphans, reapDetachedChannelClaudes } from './channel-poller-reap.js'
 
 const TMUX = resolveFromPath('tmux')
-const CLAUDE = resolveFromPath('claude')
+let CLAUDE_CLI: string
+try {
+  CLAUDE_CLI = resolveFromPath(CLI_COMMAND)
+} catch {
+  CLAUDE_CLI = CLI_COMMAND
+}
 
 // The fleet's channel plugins keyed by provider. A sub-agent must enable ONLY
 // its own provider's plugin; the others are forced off so it cannot spawn a
@@ -284,8 +289,17 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     const authMode = readAgentAuthMode(name)
     const isClaude = model.startsWith('claude-')
     const isDeepseek = model.startsWith('deepseek-')
-    const isOllama = !isClaude && !isDeepseek
-    const ollamaEnv = isOllama ? `export ANTHROPIC_AUTH_TOKEN=ollama && export ANTHROPIC_BASE_URL=${OLLAMA_URL} && ` : ''
+    const isLocal = !isClaude && !isDeepseek
+
+    const localApiUrl = readAgentApiUrl(name)
+    const localApiKey = readAgentApiKey(name)
+    
+    // If using qwen CLI, pass openai flags. If using claude CLI, fall back to Anthropic env variables.
+    const isQwen = CLI_COMMAND === 'qwen' || CLAUDE_CLI.endsWith('qwen')
+    
+    const localEnv = (isLocal && !isQwen) ? `export ANTHROPIC_AUTH_TOKEN="${localApiKey}" && export ANTHROPIC_BASE_URL="${localApiUrl}" && ` : ''
+    const localFlags = (isLocal && isQwen) ? `--auth-type openai --openai-base-url "${localApiUrl}" --openai-api-key "${localApiKey}" ` : ''
+    
     const deepseekKey = isDeepseek ? (getSecret('DEEPSEEK_API_KEY') ?? '') : ''
     const deepseekEnv = isDeepseek ? `export ANTHROPIC_AUTH_TOKEN="${deepseekKey}" && export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic && ` : ''
     // When authMode is 'api', the agent uses its own ANTHROPIC_API_KEY from
@@ -372,7 +386,7 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     const channelFlag = hasChannel ? `--channels plugin:${provider.pluginId}` : ''
     // Single-quote `${model}` so values like `claude-opus-4-8[1m]` (1M-context
     // suffix) are not glob-expanded by the shell that tmux spawns the command in.
-    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${ollamaEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE} ${continueFlag}${skipFlag}--model '${model}' ${channelFlag}`.trimEnd()
+    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}--model '${model}' ${localFlags}${channelFlag}`.trimEnd()
     runTmux(null, ['new-session', '-d', '-s', session, cmd], { timeout: 10000 })
 
     logger.info({ name, session, channelDir: agentChannelDir }, 'Agent tmux session started')

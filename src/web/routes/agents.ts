@@ -3,7 +3,7 @@ import { join, extname, dirname } from 'node:path'
 import { homedir, platform } from 'node:os'
 import { execSync } from 'node:child_process'
 import { logger } from '../../logger.js'
-import { MAIN_AGENT_ID, BOT_NAME, PROJECT_ROOT } from '../../config.js'
+import { MAIN_AGENT_ID, BOT_NAME, PROJECT_ROOT, LOCAL_API_BASE_URL } from '../../config.js'
 import { createAgentMessage, listPendingChannelRequests, updateChannelRequestStatus, getDb } from '../../db.js'
 import { atomicWriteFileSync } from '../atomic-write.js'
 import { getSecret, setSecret, deleteSecret, listSecrets } from '../vault.js'
@@ -427,6 +427,28 @@ export async function tryHandleAgents(ctx: RouteContext, webDir: string): Promis
   // both in the "new agent" wizard and the agent edit panel.
   if (path === '/api/models/available' && method === 'GET') {
     const hasDeepseek = getSecret('DEEPSEEK_API_KEY') !== null
+    
+    let localModels: { id: string; label: string }[] = []
+    if (LOCAL_API_BASE_URL) {
+      try {
+        const url = LOCAL_API_BASE_URL.endsWith('/v1') 
+            ? `${LOCAL_API_BASE_URL}/models`
+            : `${LOCAL_API_BASE_URL.replace(/\/+$/, '')}/v1/models`
+        const res = await fetch(url, { signal: AbortSignal.timeout(1500) })
+        if (res.ok) {
+          const data = await res.json() as { data?: { id: string }[] }
+          if (data && Array.isArray(data.data)) {
+            localModels = data.data.map(m => ({
+              id: m.id,
+              label: `Lokális: ${m.id}`
+            }))
+          }
+        }
+      } catch (err) {
+        // ignore timeout or network error
+      }
+    }
+
     json(res, {
       claude: [
         { id: 'claude-fable-5', label: 'Fable 5 (legújabb)' },
@@ -441,6 +463,7 @@ export async function tryHandleAgents(ctx: RouteContext, webDir: string): Promis
           ]
         : [],
       deepseekConfigured: hasDeepseek,
+      local: localModels,
     })
     return true
   }

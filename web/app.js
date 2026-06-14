@@ -2128,11 +2128,13 @@ async function loadAvailableModels() {
     const res = await fetch('/api/models/available')
     if (!res.ok) return
     const data = await res.json()
+    
+    // Deepseek
     const deepseekModels = Array.isArray(data.deepseek) ? data.deepseek : []
-    const editGroup = document.getElementById('deepseekModelGroup')
-    const wizardGroup = document.getElementById('agentModelDeepseekGroup')
-    const hint = document.getElementById('deepseekHint')
-    for (const group of [editGroup, wizardGroup]) {
+    const dsEditGroup = document.getElementById('deepseekModelGroup')
+    const dsWizardGroup = document.getElementById('agentModelDeepseekGroup')
+    const dsHint = document.getElementById('deepseekHint')
+    for (const group of [dsEditGroup, dsWizardGroup]) {
       if (!group) continue
       group.innerHTML = ''
       if (deepseekModels.length === 0) {
@@ -2147,7 +2149,28 @@ async function loadAvailableModels() {
         group.appendChild(opt)
       }
     }
-    if (hint) hint.style.display = deepseekModels.length === 0 ? 'block' : 'none'
+    if (dsHint) dsHint.style.display = deepseekModels.length === 0 ? 'block' : 'none'
+
+    // Local
+    const localModels = Array.isArray(data.local) ? data.local : []
+    const localEditGroup = document.getElementById('localModelGroup')
+    const localWizardGroup = document.getElementById('agentModelLocalGroup')
+    for (const group of [localEditGroup, localWizardGroup]) {
+      if (!group) continue
+      group.innerHTML = ''
+      if (localModels.length === 0) {
+        group.style.display = 'none'
+        continue
+      }
+      group.style.display = ''
+      for (const m of localModels) {
+        const opt = document.createElement('option')
+        opt.value = m.id
+        opt.textContent = m.label
+        group.appendChild(opt)
+      }
+    }
+
   } catch { /* dashboard not available */ }
 }
 
