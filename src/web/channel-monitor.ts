@@ -347,7 +347,7 @@ export function resumeMarveenSession(): boolean {
     // spares the live session (this pane) and kills only the leftovers.
     // See project_channels_continue_respawn_leak.
     try {
-      reapDetachedChannelClaudes({ tmuxPath: TMUX })
+      reapDetachedChannelClaudes({ tmuxPath: TMUX, binary: resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude' })
     } catch (err) {
       logger.warn({ err }, 'resumeMarveenSession: detached-claude reap failed (continuing)')
     }
@@ -702,7 +702,8 @@ function checkMainKeepaliveStaleness(): void {
   // The bun-child check is the same liveness signal channel-plugin-unlock
   // already uses; reuse it here so the two paths agree on "alive".
   try {
-    const claudePid = getClaudePidForSession(MAIN_CHANNELS_SESSION)
+    const cliBinary = resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude'
+    const claudePid = getClaudePidForSession(MAIN_CHANNELS_SESSION, cliBinary)
     if (claudePid != null) {
       const provider = getProvider(getMainAgentProvider())
       if (hasChannelPluginAlive(claudePid, provider.type)) {
@@ -990,8 +991,9 @@ export function startChannelPluginMonitor(): NodeJS.Timeout | null {
       else agentStuckInput.set(t.session, next)
     }
 
+    const cliBinary = resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude'
     for (const t of targets) {
-      const claudePid = getClaudePidForSession(t.session)
+      const claudePid = getClaudePidForSession(t.session, cliBinary)
       if (!claudePid) {
         if (!t.isMarveen && t.agentName) {
           const lastRestart = agentLastRestart.get(t.agentName)
@@ -1090,7 +1092,7 @@ export function startChannelPluginMonitor(): NodeJS.Timeout | null {
     if (shouldRunPeriodicReap(lastDetachedReapAt, Date.now(), DETACHED_REAP_INTERVAL_MS)) {
       lastDetachedReapAt = Date.now()
       try {
-        const reaped = reapDetachedChannelClaudes({ tmuxPath: TMUX })
+        const reaped = reapDetachedChannelClaudes({ tmuxPath: TMUX, binary: resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude' })
         if (reaped.length > 0) {
           logger.warn({ reaped }, 'channel-monitor: periodic reap removed detached channel-claude orphans')
         }

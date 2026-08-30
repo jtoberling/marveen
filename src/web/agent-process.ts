@@ -281,7 +281,7 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     // this agent's tmux session above, so its leftover claude is now detached;
     // pane attribution spares every live sibling and the main session.
     try {
-      reapDetachedChannelClaudes({ tmuxPath: TMUX })
+      reapDetachedChannelClaudes({ tmuxPath: TMUX, binary: resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude' })
     } catch (err) {
       logger.warn({ err, name }, 'pre-launch detached-claude reap failed (continuing)')
     }
@@ -308,10 +308,21 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     // convention `agent-{name}-api-key`. We inject it as an env var so Claude
     // Code picks it up without needing OAuth credentials at all.
     let apiKeyEnv = ''
+    let apiKeyFlags = ''
     if (isClaude && authMode === 'api') {
       const agentApiKey = getSecret(`agent-${name}-api-key`) ?? ''
       if (agentApiKey) {
         apiKeyEnv = `export ANTHROPIC_API_KEY="${agentApiKey}" && `
+      }
+    }
+    if (isQwen && authMode === 'api') {
+      // Qwen has no ANTHROPIC_API_KEY env; the api-mode key is passed as an
+      // OpenAI-style flag. Inject both the flag (for local models) and the env
+      // (for remote models that still read ANTHROPIC_API_KEY).
+      const agentApiKey = getSecret(`agent-${name}-api-key`) ?? ''
+      if (agentApiKey) {
+        apiKeyEnv = `export ANTHROPIC_API_KEY="${agentApiKey}" && `
+        apiKeyFlags = `--openai-api-key "${agentApiKey}" `
       }
     }
     // Apply security profile: write allow/deny list into settings.json, and
@@ -393,7 +404,7 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
       resolvedModel = probed || model
     }
     const modelFlag = `--model '${resolvedModel}'`
-    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}${modelFlag} ${localFlags}${channelFlag}`.trimEnd()
+    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}${modelFlag} ${localFlags}${apiKeyFlags}${channelFlag}`.trimEnd()
     runTmux(null, ['new-session', '-d', '-s', session, cmd], { timeout: 10000 })
 
     logger.info({ name, session, channelDir: agentChannelDir }, 'Agent tmux session started')

@@ -159,12 +159,13 @@ export function reapChannelOrphans(
 
 export interface ProcRow { pid: number; ppid: number; command: string }
 
-// argv[0] basename === 'claude' (the binary), so the tmux server row whose argv
-// merely *contains* the claude command string is excluded.
-function isClaudeBinary(command: string): boolean {
+// argv[0] basename === the CLI binary (claude by default; qwen when configured),
+// so the tmux server row whose argv merely *contains* the binary command string
+// is excluded.
+function isClaudeBinary(command: string, binary: string): boolean {
   const argv0 = command.trim().split(/\s+/, 1)[0] ?? ''
   const base = argv0.split('/').pop() ?? ''
-  return base === 'claude'
+  return base === binary
 }
 
 /**
@@ -178,6 +179,7 @@ export function findOrphanChannelClaudes(
   procs: ProcRow[],
   livePanePids: Set<number>,
   channelNeedle?: string,
+  binary = 'claude',
 ): number[] {
   const byPid = new Map<number, ProcRow>()
   for (const p of procs) byPid.set(p.pid, p)
@@ -199,7 +201,7 @@ export function findOrphanChannelClaudes(
   const orphans: number[] = []
   for (const p of procs) {
     if (!p.command.includes('--channels')) continue
-    if (!isClaudeBinary(p.command)) continue
+    if (!isClaudeBinary(p.command, binary)) continue
     if (channelNeedle && !p.command.includes(channelNeedle)) continue
     if (attachedToLivePane(p.pid)) continue
     orphans.push(p.pid)
@@ -260,7 +262,7 @@ function killBunChildren(claudePid: number): void {
  * tmuxPath defaults to a bare `tmux` (resolved on PATH); callers that already
  * hold an absolute path should pass it.
  */
-export function reapDetachedChannelClaudes(opts: { channelNeedle?: string; tmuxPath?: string } = {}): number[] {
+export function reapDetachedChannelClaudes(opts: { channelNeedle?: string; tmuxPath?: string; binary?: string } = {}): number[] {
   const tmuxPath = opts.tmuxPath ?? 'tmux'
   const procs = snapshotProcs()
   const live = livePanePids(tmuxPath)
@@ -270,7 +272,7 @@ export function reapDetachedChannelClaudes(opts: { channelNeedle?: string; tmuxP
     logger.warn('channel-poller-reap: no live panes resolved, skipping detached-claude reap (fail-safe)')
     return []
   }
-  const orphans = findOrphanChannelClaudes(procs, live, opts.channelNeedle)
+  const orphans = findOrphanChannelClaudes(procs, live, opts.channelNeedle, opts.binary ?? 'claude')
   for (const pid of orphans) {
     killBunChildren(pid)
     try { process.kill(pid, 'SIGTERM') } catch { /* gone */ }

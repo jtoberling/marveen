@@ -43,9 +43,10 @@ MAIN_AGENT_ID="${MAIN_AGENT_ID//[^a-zA-Z0-9_-]/}"
 SESSION="${MAIN_AGENT_ID}-channels"
 
 TMUX="$(command -v tmux)"
-CLAUDE="$(command -v claude)"
+CLI_COMMAND="${CLI_COMMAND:-qwen}"
+CLAUDE="$(command -v "$CLI_COMMAND")"
 if [ -z "$TMUX" ] || [ -z "$CLAUDE" ]; then
-  log "tmux or claude not on PATH; cannot act. PATH=$PATH"
+  log "tmux or $CLI_COMMAND not on PATH; cannot act. PATH=$PATH"
   exit 0
 fi
 
@@ -91,7 +92,7 @@ if [ "$count" -ge "$MAX_CONSECUTIVE" ]; then
   exit 0
 fi
 
-# --- recover: respawn-pane ONLY the channels session, fresh claude ---
+# --- recover: respawn-pane ONLY the channels session, fresh CLI ---
 MAIN_MODEL=""
 if [ -f "$INSTALL_DIR/.claude/settings.json" ] && command -v jq >/dev/null 2>&1; then
   MAIN_MODEL="$(jq -r '.model // empty' "$INSTALL_DIR/.claude/settings.json" 2>/dev/null)"
@@ -99,9 +100,18 @@ fi
 MODEL_FLAG=""
 [ -n "$MAIN_MODEL" ] && MODEL_FLAG="--model '$MAIN_MODEL' "
 
+# Resolve skip/channel flags per CLI (qwen drops --channels, uses --yolo).
+if [ "$(basename "$CLI_COMMAND")" = "qwen" ] || [ "$(basename "$CLI_COMMAND")" = "qwen-code" ]; then
+  SKIP_FLAG="--yolo"
+  CHANNEL_FLAG=""
+else
+  SKIP_FLAG="--dangerously-skip-permissions"
+  CHANNEL_FLAG="--channels plugin:telegram@claude-plugins-official"
+fi
+
 # Full PATH with .bun/bin -- without it the respawned bun telegram bridge does
 # not come up and the session is channel-less.
-RESPAWN_CMD="export PATH=\"/opt/homebrew/bin:\$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin\" && $CLAUDE --dangerously-skip-permissions ${MODEL_FLAG}--channels plugin:telegram@claude-plugins-official"
+RESPAWN_CMD="export PATH=\"/opt/homebrew/bin:\$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin\" && $CLAUDE ${SKIP_FLAG} ${MODEL_FLAG}${CHANNEL_FLAG}"
 
 log "keepalive stale ${age}s (>${STALE_SECONDS}s) and session up -- respawn-pane $SESSION (respawn #$((count+1)))"
 if "$TMUX" respawn-pane -k -t "$SESSION" "$RESPAWN_CMD" 2>/dev/null; then

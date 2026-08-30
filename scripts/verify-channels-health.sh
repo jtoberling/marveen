@@ -20,12 +20,19 @@ BOT_PID_FILE="$HOME/.claude/channels/telegram/bot.pid"
 fail=0
 note() { echo "  $1"; }
 
-# Find the channels claude pid: a `claude ... --channels` process whose cwd is
-# the install dir. We match the session's claude by argv + the --channels flag.
+# Find the channels CLI pid: a process running the configured CLI with the
+# telegram channel plugin. For claude this is `claude ... --channels plugin:`;
+# for qwen the telegram plugin runs as a bun child under the pane, so fall back
+# to matching the CLI binary in argv + the install dir.
+CLI_COMMAND="${CLI_COMMAND:-qwen}"
 CLAUDE_PID="$(pgrep -af -- '--channels plugin:' | grep -F "$INSTALL_DIR" 2>/dev/null | awk '{print $1}' | head -1)"
 if [ -z "$CLAUDE_PID" ]; then
-  # Fallback: any claude with --channels (single main session on this box).
+  # Fall back to any CLI process whose argv carries the telegram plugin
+  # (claude) or whose command is the configured binary + install dir.
   CLAUDE_PID="$(pgrep -af -- '--channels plugin:' | grep -vi 'agent-' | awk '{print $1}' | head -1)"
+  if [ -z "$CLAUDE_PID" ]; then
+    CLAUDE_PID="$(pgrep -af "$CLI_COMMAND" | grep -F "$INSTALL_DIR" | grep -vi 'agent-' | awk '{print $1}' | head -1)"
+  fi
 fi
 
 echo "verify-channels-health: session=$SESSION"

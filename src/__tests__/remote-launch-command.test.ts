@@ -27,7 +27,8 @@ describe('buildContinueProbeCommand', () => {
   it('keeps $HOME OUTSIDE the single-quoted region so the remote shell expands it', () => {
     const cmd = buildContinueProbeCommand('/var/www/casino-common')
     // $HOME must be in a double-quoted (expandable) region, NOT single-quoted.
-    expect(cmd).toContain('"$HOME/.claude/projects/"')
+    // Default CLI_COMMAND is qwen, so the remote project dir is $HOME/.qwen.
+    expect(cmd).toContain('"$HOME/.qwen/projects/"')
     expect(cmd).not.toContain("'$HOME")
     // The encoded (leading-dash) segment is single-quoted and concatenated, so
     // it forms one path word and is not parsed as a `test` flag.

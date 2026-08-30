@@ -49,6 +49,14 @@ export type PaneState = 'idle' | 'busy' | 'typing' | 'unknown' | 'error'
 //       otherwise be misread as idle.
 const IDLE_FOOTER_RX = /(?:bypass permissions on|YOLO mode)(?: \(shift ?\+ ?tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
 
+// Qwen idle-footer variants: Qwen renders an idle prompt footer with a
+// different shape. Add `(?i)`-style alternations for the common Qwen idle
+// markers so a Qwen pane is also recognised as idle (else detectPaneState
+// returns 'unknown' and the scheduler never injects). Keep the Claude shapes
+// above intact for backward compatibility. The Qwen shapes are best-effort:
+// if a real Qwen capture reveals a different footer, extend this alternation.
+const QWEN_IDLE_FOOTER_RX = /^(?:at prompt|idle|ready|awaiting|enter command|command:)[>· ]*$/i
+
 // Positive busy signals. ANY match anywhere in the pane means the turn
 // is mid-flight, even if the footer looks idle for a frame.
 //
@@ -89,6 +97,10 @@ const BUSY_INDICATORS: RegExp[] = [
   // false positive. Non-exhaustive by design; the bare tokens pattern
   // above is the authoritative fallback.
   /\b(?:Combobulating|Beaming|Thinking|Pondering|Reticulating|Configuring|Noodling|Ruminating|Percolating|Cogitating|Deliberating|Contemplating|Musing|Brewing|Synthesizing|Distilling|Refining|Simmering|Crafting|Formulating|Consulting|Unfurling|Unspooling|Unraveling)…\s*\(\s*\d+s\s*·\s*↓/,
+  // Qwen spinner/busy labels paired with the turn-scoped `(... · ↓` tail on
+  // the same line. Non-exhaustive by design; the bare tokens pattern above
+  // is the authoritative fallback.
+  /\b(?:Resolving|Planning|Working|Processing|Calculating|Generating|Analyzing|Evaluating|Debugging|Refactoring|Implementing|Investigating)…\s*\(\s*\d+s\s*·\s*↓/,
 ]
 
 // `esc to interrupt` is a footer-region-only busy signal: Claude Code
@@ -98,7 +110,7 @@ const BUSY_INDICATORS: RegExp[] = [
 // in the scrollback from permanently pinning the session as busy
 // (observed incident: 81 consecutive scheduler retries on a report that
 // contained the phrase in its body).
-const BUSY_ESC_TO_INTERRUPT_RX = /\besc to interrupt\b/
+const BUSY_ESC_TO_INTERRUPT_RX = /\b(?:esc to interrupt|ctrl\+c to interrupt|q to quit|q to exit|esc to quit|q to cancel)\b/i
 const LIVE_FOOTER_REGION_LINES = 5
 
 // Pasted-text placeholder. Claude Code lifts a single large input write
@@ -115,7 +127,7 @@ const LIVE_FOOTER_REGION_LINES = 5
 // the leading indent of the wrapped continuation) rather than a single
 // literal space. This still matches the unwrapped `[Pasted text #N` and
 // `[Pasted text #N +X chars]` shapes.
-const PENDING_PASTE_RX = /\[Pasted text\s*#\s*\d/
+const PENDING_PASTE_RX = /\[Pasted text\s*#\s*\d|(?:Pasted|📋|\[Paste|Pasted chunk)\s*(?:text\s*)?#\s*\d/
 
 // How many trailing lines to inspect for the stub when no input-box
 // separators are visible (a malformed / partial capture, or the older
@@ -213,7 +225,7 @@ const PARKED_INPUT_RX = /[❯>][ \t]+\S/
 // a benign `⎿ API Error: 429` on one line plus an unrelated "thinking
 // ... cannot be modified" prose on another line would AND-combine into
 // a false positive on a healthy session.
-const ERROR_CHROME_RX = /⎿\s*API Error:\s*\d+/
+const ERROR_CHROME_RX = /⎿\s*API Error:\s*\d+|(?:!|\[?!)\s*Error:|error:|Traceback|Error\s*:?\s*\d+/i
 const ERROR_THINKING_PHRASE_RX = /cannot be modified/
 const ERROR_THINKING_KIND_RX = /\b(?:redacted_thinking|thinking)\b/
 
@@ -287,8 +299,8 @@ export function detectsThinkingBlockError(pane: string): boolean {
 //       quotes "Esc to cancel" does not trigger it.
 // `esc to interrupt` (the busy footer) is deliberately excluded from
 // MENU_ESC_RX, and guard (a) rejects it anyway.
-const MENU_NAV_RX = /(?:↑\/↓|↑↓)\s+to\s+(?:navigate|select|choose)/
-const MENU_ESC_RX = /\besc to (?:cancel|exit|close|go back|quit)\b/i
+const MENU_NAV_RX = /(?:↑\/↓|↑↓)\s+to\s+(?:navigate|select|choose)|(?:↑|↓|arrow|up|down)\s+(?:key|press)?\s*(?:to\s+)?(?:navigate|select|choose)/i
+const MENU_ESC_RX = /\besc to (?:cancel|exit|close|go back|quit)|q(?: to)?(?: to)?\s*(?:cancel|exit|close|go back|quit)|exit|back\b/i
 const MENU_FOOTER_REGION_LINES = 8
 
 /**
@@ -968,7 +980,7 @@ export interface ToolCallProgressSignature {
   seconds: number
 }
 
-const TOOL_CALL_PROGRESS_RX = /(?:✻\s*)?(Worked|Brewed|Baked|Cooking|Simmered|Sauteed|Sauted)\s+for\s+(\d+)s/i
+const TOOL_CALL_PROGRESS_RX = /(?:✻\s*)?(Worked|Brewed|Baked|Cooking|Simmered|Sauteed|Sauted|Working|Processing|Running|Compiling|Fetching|Loading)\s+for\s+(\d+)s/i
 
 export function stuckToolCallSignature(pane: string): ToolCallProgressSignature | null {
   const m = pane.match(TOOL_CALL_PROGRESS_RX)

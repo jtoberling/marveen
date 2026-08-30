@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
-import { PROJECT_ROOT } from '../config.js'
+import { PROJECT_ROOT, CLI_COMMAND } from '../config.js'
 import { channelStateDir, type ChannelProviderType } from '../channel-provider.js'
 import { agentDir } from '../web/agent-config.js'
 import { matchesProviderPollerCmd } from './provider-poller-match.js'
@@ -31,15 +31,15 @@ export const RESPAWN_STAMP_FILE = join(PROJECT_ROOT, 'store', '.channel-last-res
 
 // --- extracted verbatim from channel-monitor.ts (behavior-preserving) ---
 
-export function getClaudePidForSession(session: string): number | null {
+export function getClaudePidForSession(session: string, binary: string = 'claude'): number | null {
   try {
     const out = execFileSync(TMUX, ['list-panes', '-t', session, '-F', '#{pane_pid}'], { timeout: 3000, encoding: 'utf-8' })
     const panePid = parseInt(out.trim().split('\n')[0], 10)
     if (!panePid) return null
     const cmd = execFileSync('/bin/ps', ['-p', String(panePid), '-o', 'comm='], { timeout: 3000, encoding: 'utf-8' }).trim()
-    if (cmd === 'claude' || cmd.endsWith('/claude')) return panePid
+    if (cmd === binary || cmd.endsWith('/' + binary)) return panePid
     try {
-      const child = execFileSync('/usr/bin/pgrep', ['-P', String(panePid), '-x', 'claude'], { timeout: 3000, encoding: 'utf-8' }).trim()
+      const child = execFileSync('/usr/bin/pgrep', ['-P', String(panePid), '-x', binary], { timeout: 3000, encoding: 'utf-8' }).trim()
       if (child) return parseInt(child.split('\n')[0], 10)
     } catch { /* none */ }
     return null
@@ -208,7 +208,8 @@ export function decideNativeChannelDown(f: NativeStateFacts): boolean {
 // the pure decision.
 export function probeNativeChannelDown(session: string, provider: ChannelProviderType, agentName?: string): boolean {
   const now = Date.now()
-  const claudePid = getClaudePidForSession(session)
+  const cliBinary = resolveFromPath(CLI_COMMAND).split('/').pop() ?? 'claude'
+  const claudePid = getClaudePidForSession(session, cliBinary)
   const pluginAlive = claudePid != null ? hasChannelPluginAlive(claudePid, provider, agentName) : false
   const respawnMs = readRespawnStampMs()
   return decideNativeChannelDown({

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { userInfo } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { CLI_COMMAND } from '../config.js'
+import { resolveFromPath } from '../platform.js'
 // SSH + tmux transport primitives.
 //
 // Every tmux operation against a remote agent is routed through here so the
@@ -150,22 +151,25 @@ export function buildRemoteLaunchCommand(opts: {
   const isQwen = (CLI_COMMAND || '').includes('qwen')
   const skipFlag = isQwen ? ' --yolo' : ' --dangerously-skip-permissions'
   const modelFlag = isQwen ? '' : ` --model ${shQuote(opts.model)}`
-  return `${path} && cd ${shQuote(opts.workdir)} && claude ${cont}${skipFlag}${modelFlag}`
+  const cliBin = resolveFromPath(CLI_COMMAND)
+  return `${path} && cd ${shQuote(opts.workdir)} && ${cliBin} ${cont}${skipFlag}${modelFlag}`
 }
 
 /**
- * Build the remote `test -d` command that probes whether a prior Claude Code
- * session dir exists for an absolute workdir (so the launcher knows whether to
- * pass --continue). $HOME MUST stay outside the single-quoted region so the
- * remote shell expands it; only the validated, leading-dash-encoded segment is
- * single-quoted. The two adjacent quotings concatenate into one path word, so
- * the leading '-' is never parsed as a `test` flag. (shQuoting the whole path --
- * including $HOME -- would test a directory literally named "$HOME", which never
- * exists, silently dropping --continue on every remote launch.)
+ * Build the remote `test -d` command that probes whether a prior agent session
+ * dir exists for an absolute workdir (so the launcher knows whether to pass
+ * --continue). Qwen stores its sessions under $HOME/.qwen/projects/<encoded>;
+ * Claude under $HOME/.claude/projects/<encoded>. Only the validated,
+ * leading-dash-encoded segment is single-quoted; $HOME stays outside the quoted
+ * region so the remote shell expands it. The two adjacent quotings concatenate
+ * into one path word, so the leading '-' is never parsed as a `test` flag.
  */
 export function buildContinueProbeCommand(absWorkdir: string): string {
   const encoded = absWorkdir.replace(/\//g, '-')
-  return 'test -d "$HOME/.claude/projects/"' + shQuote(encoded)
+  const isQwen = (CLI_COMMAND || '').includes('qwen')
+  const projDir = isQwen ? '$HOME/.qwen/projects' : '$HOME/.claude/projects'
+  const closingQuote = '"'
+  return 'test -d ' + closingQuote + projDir + '/' + closingQuote + shQuote(encoded)
 }
 
 let controlDirEnsured = false

@@ -112,7 +112,10 @@ if [ ! -d "$INSTALL_DIR/agents" ]; then
   exit 0
 fi
 
-CLAUDE_BIN="$(command -v claude)"
+# Resolve the CLI binary from CLI_COMMAND (defaults to qwen) so sub-agents
+# can run qwen or claude depending on config.
+CLI_COMMAND="${CLI_COMMAND:-qwen}"
+CLAUDE_BIN="$(command -v "$CLI_COMMAND")"
 
 for AGENT_DIR in "$INSTALL_DIR/agents"/*/; do
   AGENT_ID=$(basename "$AGENT_DIR")
@@ -133,7 +136,15 @@ for AGENT_DIR in "$INSTALL_DIR/agents"/*/; do
     continue
   fi
 
-  CMD="export PATH=\"/opt/homebrew/bin:\$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH\" && unset TELEGRAM_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN DISCORD_BOT_TOKEN && export TELEGRAM_STATE_DIR=\"$CHAN_DIR\" && cd \"$AGENT_DIR\" && ${CLAUDE_BIN} --dangerously-skip-permissions --model '$MODEL' --channels plugin:telegram@claude-plugins-official"
+  if [ "$(basename "$CLI_COMMAND")" = "qwen" ] || [ "$(basename "$CLI_COMMAND")" = "qwen-code" ]; then
+    SKIP_FLAG="--yolo"
+    CHANNEL_FLAG=""
+  else
+    SKIP_FLAG="--dangerously-skip-permissions"
+    CHANNEL_FLAG="--channels plugin:telegram@claude-plugins-official"
+  fi
+
+  CMD="export PATH=\"/opt/homebrew/bin:\$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH\" && unset TELEGRAM_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN DISCORD_BOT_TOKEN && export TELEGRAM_STATE_DIR=\"$CHAN_DIR\" && cd \"$AGENT_DIR\" && ${CLAUDE_BIN} ${SKIP_FLAG} ${MODEL_FLAG:+--model '$MODEL'} ${CHANNEL_FLAG}"
 
   tmux new-session -d -s "$SESSION_NAME" "$CMD" 2>/dev/null
   sleep 2
