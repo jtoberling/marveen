@@ -13,6 +13,7 @@ import {
   decideStuckInputRecovery,
   parkedChannelInput,
   parkedInputText,
+  stuckToolCallSignature,
 } from '../pane-state.js'
 
 // Realistic pane fixtures modelled on actual `tmux capture-pane -p`
@@ -663,13 +664,110 @@ describe('detectPaneState', () => {
 
   it('handles footer with missing bottom separator', () => {
     // Defensive: only one separator visible -- no input box detection,
-    // but footer + no busy indicators still means idle.
+  // but footer + no busy indicators still means idle.
     const snap = [
       '❯ ',
       SEP,
       '  ⏵⏵ bypass permissions on (shift+tab to cycle)',
     ].join('\n')
     expect(detectPaneState(snap)).toBe('idle')
+  })
+})
+
+// Qwen CLI terminal output is a DIFFERENT surface from Claude Code: different
+// idle footer, different spinner/busy labels, different paste stub, error
+// chrome, and menu hints. These fixtures keep the Qwen-or-patterns in
+// pane-state.ts (IDLE_FOOTER_RX, BUSY_INDICATORS, BUSY_ESC_TO_INTERRUPT_RX,
+// PENDING_PASTE_RX, ERROR_CHROME_RX, MENU_NAV/ESC_RX, TOOL_CALL_PROGRESS_RX)
+// exercised for real. Claude fixtures live in the describe above; BOTH must
+// classify correctly for a mixed fleet.
+describe('detectPaneState (Qwen CLI)', () => {
+  it('detects idle on a Qwen idle prompt footer', () => {
+    const qwenIdle = [
+      SEP,
+      '❯ at prompt',
+      SEP,
+      '  ⏵⏵ at prompt',
+    ].join('\n')
+    expect(detectPaneState(qwenIdle)).toBe('idle')
+  })
+
+  it('detects idle when a Qwen idle footer is present without a busy marker', () => {
+    const qwenIdle2 = [
+      'tool ran: ls',
+      '',
+      '  Ready.',
+    ].join('\n')
+    expect(detectPaneState(qwenIdle2)).toBe('idle')
+  })
+
+  it('detects busy from a Qwen busy spinner label with the turn-scoped tail', () => {
+    const qwenBusy = [
+      'Resolving task...',
+      '(3s · ↓ 1.2k tokens)',
+    ].join('\n')
+    expect(detectPaneState(qwenBusy)).toBe('busy')
+  })
+
+  it('detects busy from the token-count pattern under a Qwen label', () => {
+    const qwenBusy2 = [
+      '  Planning (52s · ↓ 2.6k tokens ...)',
+    ].join('\n')
+    expect(detectPaneState(qwenBusy2)).toBe('busy')
+  })
+
+  it('detects busy from a Qwen-style esc-to-interrupt footer hint', () => {
+    const qwenEsc = [
+      SEP,
+      '  Working · esc to quit',
+    ].join('\n')
+    expect(detectPaneState(qwenEsc)).toBe('busy')
+  })
+
+  it('detects a Qwen-style pasted-text stub as stuck', () => {
+    const qwenPaste = [
+      '',
+      SEP,
+      '❯ ',
+      SEP,
+      '  Pasted chunk #3',
+      SEP,
+      '  ⏵⏵ at prompt',
+    ].join('\n')
+    expect(detectPaneState(qwenPaste)).toBe('busy')
+  })
+
+  it('detects a Qwen thinking-block API error as error', () => {
+    const qwenErr = [
+      '  ⎿  API Error: 400 messages.55.content.19: `thinking` or `redacted_thinking` blocks in the latest assistant message',
+      '      cannot be modified. These blocks must remain as they were in the original response.',
+      '',
+      SEP,
+      '  ⏵⏵ at prompt',
+    ].join('\n')
+    expect(detectPaneState(qwenErr)).toBe('error')
+  })
+
+  it('detects a blocking menu under a Qwen nav hint', () => {
+    const qwenMenu = [
+      SEP,
+      '  ↑/↓ to navigate · Enter to confirm · Esc to exit',
+    ].join('\n')
+    expect(detectsBlockingMenu(qwenMenu)).toBe(true)
+  })
+
+  it('reports unknown for a bare Qwen prompt with no recognised footer', () => {
+    expect(detectPaneState('just some output with no footer')).toBe('unknown')
+  })
+})
+
+describe('stuckToolCallSignature (Qwen CLI)', () => {
+  it('parses a Qwen busy-tag verb with seconds', () => {
+    expect(stuckToolCallSignature('Working for 12s')).toEqual({ tag: 'working', seconds: 12 })
+  })
+
+  it('returns null when no progress line is present', () => {
+    expect(stuckToolCallSignature('❯ at prompt')).toBeNull()
   })
 })
 

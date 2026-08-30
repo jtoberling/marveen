@@ -89,10 +89,26 @@ CÉL:   qwen session location (mindig is qwen? akkor a CLAUDE_CLI-al párhuzamos
 
 ## PRIORITÁS 3 — PANE DETEKCIÓ (pane-state.ts)
 
-**Állapot:** ⚠️ `YOLO mode` IDLE_FOOTER_RX:50-hoz hozzáadva, de a BUSY/ERROR/MENU regex-ek
-**mind Claude-specifikusak.**
+**Állapot:** ✅ KÉSZ (2026-08-30). Qwen TUI state-detection validálva.
 
 **SZABÁLY:** NE TÖRLJ meglévő Claude regex-et! BŐVÍTSD OR-pattern-nel (mindkét CLI).
+
+**MÓDSZER:** A Qwen busy signal-eket egy KÉPES `QWEN_INDICATORS` listába raktam
+(SEPARATE from BUSY_INDICATORS), nem módosítottam a Claude listát. `detectPaneState`
+OR-ágként futtatja a Qwen listát. Footer-lokáció (thinking-block scope, input box
+framing, blocking-menu) mindkét CLI idle footer-ét elfogadja.
+
+**Validálás:** `src/__tests__/pane-state-qwen-validation.test.ts` (14 test) +
+`pane-state.test.ts` Qwen test-ek (real TUI render-ek a `/usr/src/qwen-code`
+forráskódból: InputPrompt, Footer, RespondingSpinner, ConsentPrompt, ContextUsage).
+
+**Qwen idle-footer** (`QWEN_IDLE_FOOTER_RX`): `at prompt|idle|ready|awaiting`
+(word-boundary, nem restrikciós), `? for shortcuts`, `YOLO mode`, `ask permissions`,
+`type your message`, `@path to file`.
+
+**Qwen busy** (`QWEN_INDICATORS`): `% context used` token counter (Qwen NEM használja
+Claude `(Ns · ↓N tokens)` formátumát), `Enter to steer` busy-footer hint, Qwen busy
+label-ek (`Working`, `Processing`, `Resolving`, …) + `(...) · ↓` tail.
 
 ### `src/pane-state.ts`
 ```

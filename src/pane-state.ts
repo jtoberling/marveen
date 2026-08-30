@@ -49,13 +49,17 @@ export type PaneState = 'idle' | 'busy' | 'typing' | 'unknown' | 'error'
 //       otherwise be misread as idle.
 const IDLE_FOOTER_RX = /(?:bypass permissions on|YOLO mode)(?: \(shift ?\+ ?tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
 
-// Qwen idle-footer variants: Qwen renders an idle prompt footer with a
-// different shape. Add `(?i)`-style alternations for the common Qwen idle
-// markers so a Qwen pane is also recognised as idle (else detectPaneState
-// returns 'unknown' and the scheduler never injects). Keep the Claude shapes
-// above intact for backward compatibility. The Qwen shapes are best-effort:
-// if a real Qwen capture reveals a different footer, extend this alternation.
-const QWEN_IDLE_FOOTER_RX = /^(?:at prompt|idle|ready|awaiting|enter command|command:)[>· ]*$/i
+// Qwen idle-footer variants. Qwen renders an idle prompt line with a leading
+// prompt glyph (`❯`, `▍`, `>` or `* ` for YOLO approval mode) and either an
+// inline placeholder ("Type your message or @path/to/file") or a separate
+// footer hint line. The idle footer hint is `? for shortcuts` (rendered below
+// the input box) OR a YOLO/approval-mode pill ("YOLO mode", "⏸ Ask
+// permissions"). Qwen also accepts common English idle synonyms.
+//
+// The Qwen shapes are best-effort: if a real Qwen capture reveals a different
+// footer, extend this alternation. Keep the Claude shapes above intact for
+// backward compatibility.
+const QWEN_IDLE_FOOTER_RX = /(?<![\w])at prompt(?![\w])|(?<![\w])idle(?![\w])|(?<![\w])ready(?![\w])|(?<![\w])awaiting(?![\w])|\? for shortcuts|\bYOLO mode\b|ask permissions\b|type your message|@path to file/i
 
 // Positive busy signals. ANY match anywhere in the pane means the turn
 // is mid-flight, even if the footer looks idle for a frame.
@@ -97,10 +101,35 @@ const BUSY_INDICATORS: RegExp[] = [
   // false positive. Non-exhaustive by design; the bare tokens pattern
   // above is the authoritative fallback.
   /\b(?:Combobulating|Beaming|Thinking|Pondering|Reticulating|Configuring|Noodling|Ruminating|Percolating|Cogitating|Deliberating|Contemplating|Musing|Brewing|Synthesizing|Distilling|Refining|Simmering|Crafting|Formulating|Consulting|Unfurling|Unspooling|Unraveling)…\s*\(\s*\d+s\s*·\s*↓/,
+  // Qwen `% context used` token counter. Qwen renders usage as
+  // "{pct}% context used" (NOT Claude's `(Ns · ↓N tokens)`), so the bare
+  // pattern is the load-bearing busy fallback for Qwen panes. Turn-scoped:
+  // overwritten the instant a turn completes, so prose quoting "context
+  // used" in a reply cannot pin the session busy forever.
+  /\d+(\.\d+)?%\s+context used\b/i,
   // Qwen spinner/busy labels paired with the turn-scoped `(... · ↓` tail on
   // the same line. Non-exhaustive by design; the bare tokens pattern above
-  // is the authoritative fallback.
+  // is the authoritative fallback. Derived from the real Qwen TUI busy
+  // rendering (packages/cli/src/ui: RespondingSpinner, Footer).
   /\b(?:Resolving|Planning|Working|Processing|Calculating|Generating|Analyzing|Evaluating|Debugging|Refactoring|Implementing|Investigating)…\s*\(\s*\d+s\s*·\s*↓/,
+  // Qwen spinner/busy labels paired with the turn-scoped `(...) ↓` tail.
+  // Non-exhaustive by design; the bare tokens pattern above is the
+  // authoritative fallback. Derived from the real Qwen TUI busy rendering
+  // (packages/cli/src/ui: RespondingSpinner, Footer).
+  /\b(?:Resolving|Planning|Working|Processing|Calculating|Generating|Analyzing|Evaluating|Debugging|Refactoring|Implementing|Investigating)…\s*\(\s*\d+s\s*·\s*↓/,
+]
+
+// Qwen-specific busy indicators, kept SEPARATE from BUSY_INDICATORS so the
+// Claude detector is never modified and Qwen-only signals (the `% context
+// used` token counter, distinct from Claude's `(Ns · ↓N tokens)`, and the
+// `Enter to steer` footer hint) are applied as a separate OR-branch in
+// detectPaneState. This keeps the Claude busy detection byte-for-byte
+// unchanged (QWEN_INTEGRATION_PLAN P3 rule: never modify Claude regexes with
+// OR-patterns).
+const QWEN_INDICATORS: RegExp[] = [
+  /\b(?:Resolving|Planning|Working|Processing|Calculating|Generating|Analyzing|Evaluating|Debugging|Refactoring|Implementing|Investigating)…\s*\(\s*\d+s\s*·\s*↓/,
+  /\d+(\.\d+)?%\s+context used\b/i,
+  /\bEnter to steer\b/i,
 ]
 
 // `esc to interrupt` is a footer-region-only busy signal: Claude Code
@@ -257,7 +286,7 @@ export function detectsThinkingBlockError(pane: string): boolean {
   // the pane, so a footer-looking line quoted in scrollback must not win.
   let footerIdx = -1
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (IDLE_FOOTER_RX.test(lines[i])) { footerIdx = i; break }
+    if (IDLE_FOOTER_RX.test(lines[i]) || QWEN_IDLE_FOOTER_RX.test(lines[i])) { footerIdx = i; break }
   }
   if (footerIdx < 0) return false
   const start = Math.max(0, footerIdx - ERROR_LIVE_TAIL_LINES)
@@ -312,13 +341,15 @@ const MENU_FOOTER_REGION_LINES = 8
  */
 export function detectsBlockingMenu(pane: string): boolean {
   if (!pane || !pane.trim()) return false
-  for (const rx of BUSY_INDICATORS) {
+  // A live turn (spinner / token counter / steer footer) is never a parked
+  // menu — both the Claude and Qwen busy signals must reject the menu path.
+  for (const rx of [...BUSY_INDICATORS, ...QWEN_INDICATORS]) {
     if (rx.test(pane)) return false
   }
   const lines = pane.split('\n')
   const footerRegion = lines.slice(-MENU_FOOTER_REGION_LINES).join('\n')
   if (BUSY_ESC_TO_INTERRUPT_RX.test(footerRegion)) return false
-  if (IDLE_FOOTER_RX.test(pane)) return false
+  if (IDLE_FOOTER_RX.test(pane) || QWEN_IDLE_FOOTER_RX.test(pane)) return false
   return MENU_NAV_RX.test(footerRegion) || MENU_ESC_RX.test(footerRegion)
 }
 
@@ -355,6 +386,12 @@ export function detectPaneState(
   for (const rx of BUSY_INDICATORS) {
     if (rx.test(pane)) return 'busy'
   }
+  // Qwen-specific busy signals (% context used counter, `Enter to steer`
+  // footer hint) applied as an OR-branch so a Qwen pane is detected busy
+  // exactly like a Claude pane, without modifying the Claude list above.
+  for (const rx of QWEN_INDICATORS) {
+    if (rx.test(pane)) return 'busy'
+  }
 
   // Scope `esc to interrupt` check to the live footer region only.
   // Checking the whole pane would let a scrollback quote of the phrase
@@ -375,7 +412,7 @@ export function detectPaneState(
   // defer rather than pile a second prompt on.
   if (detectsPastePlaceholder(pane)) return 'busy'
 
-  if (!IDLE_FOOTER_RX.test(pane)) return 'unknown'
+  if (!IDLE_FOOTER_RX.test(pane) && !QWEN_IDLE_FOOTER_RX.test(pane)) return 'unknown'
 
   if (detectsThinkingBlockError(pane)) return 'error'
 
@@ -383,7 +420,7 @@ export function detectPaneState(
   // Scan UPWARDS from the footer so we stay inside the live box and
   // don't pick up historical ❯ lines from scrollback.
   const lines = pane.split('\n')
-  const footerIdx = lines.findIndex(l => IDLE_FOOTER_RX.test(l))
+  const footerIdx = lines.findIndex(l => IDLE_FOOTER_RX.test(l) || QWEN_IDLE_FOOTER_RX.test(l))
   if (footerIdx >= 0) {
     let bottomSep = -1
     for (let i = footerIdx - 1; i >= 0; i--) {
@@ -440,7 +477,7 @@ export function isReadyForPrompt(pane: string): boolean {
 // "not enough signal to act, do nothing".
 function liveInputBox(pane: string): string | null {
   const lines = pane.split('\n')
-  const footerIdx = lines.findIndex(l => IDLE_FOOTER_RX.test(l))
+  const footerIdx = lines.findIndex(l => IDLE_FOOTER_RX.test(l) || QWEN_IDLE_FOOTER_RX.test(l))
   if (footerIdx < 0) return null
   let bottomSep = -1
   for (let i = footerIdx - 1; i >= 0; i--) {
@@ -550,7 +587,7 @@ export function shouldRetrySubmit(
 
   // Without an idle footer the pane is either not Claude Code or in an
   // unknown render state. Be conservative and skip.
-  if (!IDLE_FOOTER_RX.test(pane)) return false
+  if (!IDLE_FOOTER_RX.test(pane) && !QWEN_IDLE_FOOTER_RX.test(pane)) return false
 
   const inputBox = liveInputBox(pane)
   if (inputBox == null) return false
