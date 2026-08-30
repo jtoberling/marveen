@@ -312,7 +312,7 @@ export function buildMainSessionRespawnCmd(opts: {
     ...((opts.claudePath || '').includes('qwen') ? ['--yolo'] : ['--dangerously-skip-permissions']),
     // Single-quote the model id so a value like `claude-opus-4-8[1m]` is not
     // glob-expanded by the shell that tmux respawn-pane spawns the command in.
-    ...(opts.model ? ['--model', `'${opts.model}'`] : []),
+    ...(opts.model && !(opts.claudePath || '').includes('qwen') ? ['--model', `'${opts.model}'`] : []),
     ...((opts.claudePath || '').includes('qwen') ? [] : [`--channels plugin:${opts.pluginId}`]),
   ].join(' ')
 }

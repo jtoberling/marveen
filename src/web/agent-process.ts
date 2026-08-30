@@ -2,6 +2,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync, execFileSync } from 'node:child_process'
+import { getValidLocalModel } from './local-model-probe.js'
 import { CLI_COMMAND } from '../config.js'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
@@ -386,7 +387,13 @@ export function startAgentProcess(name: string, opts: { fresh?: boolean } = {}):
     const channelFlag = (hasChannel && !isQwen) ? `--channels plugin:${provider.pluginId}` : ''
     // Single-quote `${model}` so values like `claude-opus-4-8[1m]` (1M-context
     // suffix) are not glob-expanded by the shell that tmux spawns the command in.
-    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}--model '${model}' ${localFlags}${channelFlag}`.trimEnd()
+    let resolvedModel = model
+    if (isLocal && isQwen) {
+      const probed = getValidLocalModel(localApiUrl ?? '', localApiKey ?? '', model)
+      resolvedModel = probed || model
+    }
+    const modelFlag = `--model '${resolvedModel}'`
+    const cmd = `export PATH="/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH" && ${unsetTokens} && ${channelSetup}${apiKeyEnv}${claudeConfigEnv}${localEnv}${deepseekEnv}cd "${dir}" && ${CLAUDE_CLI} ${continueFlag}${skipFlag}${modelFlag} ${localFlags}${channelFlag}`.trimEnd()
     runTmux(null, ['new-session', '-d', '-s', session, cmd], { timeout: 10000 })
 
     logger.info({ name, session, channelDir: agentChannelDir }, 'Agent tmux session started')

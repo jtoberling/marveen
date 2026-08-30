@@ -47,7 +47,7 @@ export type PaneState = 'idle' | 'busy' | 'typing' | 'unknown' | 'error'
 //       happens to contain "bypass permissions on · 1 shell" verbatim
 //       (an echoed log line, a quoted message, etc.) which would
 //       otherwise be misread as idle.
-const IDLE_FOOTER_RX = /(?:bypass permissions on|YOLO mode)(?: \(shift\+tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
+const IDLE_FOOTER_RX = /(?:bypass permissions on|YOLO mode)(?: \(shift ?\+ ?tab to cycle\)| · \d+ shells? · (?:ctrl\+t|↓ to manage))|\? for shortcuts/
 
 // Positive busy signals. ANY match anywhere in the pane means the turn
 // is mid-flight, even if the footer looks idle for a frame.

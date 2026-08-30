@@ -99,6 +99,12 @@ TMUX="$(command -v tmux)"
 MAIN_MODEL=""
 if [ -f "$INSTALL_DIR/.claude/settings.json" ] && command -v jq >/dev/null 2>&1; then
   MAIN_MODEL="$(jq -r '.model // empty' "$INSTALL_DIR/.claude/settings.json" 2>/dev/null)"
+  if [[ "$CLI_COMMAND" == *"qwen"* ]]; then
+    PROBED_MODEL="$(cd "$INSTALL_DIR" && npx tsx -e "import { getValidLocalModel } from './src/web/local-model-probe.ts'; import { LOCAL_API_BASE_URL, LOCAL_API_KEY } from './src/config.ts'; process.stdout.write(getValidLocalModel(LOCAL_API_BASE_URL, LOCAL_API_KEY, '$MAIN_MODEL') || '$MAIN_MODEL')" 2>/dev/null)"
+    if [ -n "$PROBED_MODEL" ]; then
+      MAIN_MODEL="$PROBED_MODEL"
+    fi
+  fi
 fi
 MODEL_FLAG=""
 # Single-quote the model id so values like `claude-opus-4-8[1m]` survive the
@@ -368,6 +374,9 @@ while $TMUX has-session -t "$SESSION" 2>/dev/null; do
 
   NOW=$(date +%s)
   _plugin_alive=false
+  if [ "$(basename "$CLI_COMMAND")" = "qwen" ] || [ "$(basename "$CLI_COMMAND")" = "qwen-code" ]; then
+    _plugin_alive=true
+  fi
   if [ -f "$MAIN_BOT_PID_FILE" ]; then
     _bot_pid=$(cat "$MAIN_BOT_PID_FILE" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$_bot_pid" ] && [ "$_bot_pid" -gt 1 ] 2>/dev/null && kill -0 "$_bot_pid" 2>/dev/null; then

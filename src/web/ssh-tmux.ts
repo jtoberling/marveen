@@ -147,8 +147,10 @@ export function buildRemoteLaunchCommand(opts: {
 }): string {
   const path = 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"'
   const cont = opts.continue ? '--continue ' : ''
-  const skipFlag = (CLI_COMMAND || '').includes('qwen') ? '--yolo' : '--dangerously-skip-permissions'
-  return `${path} && cd ${shQuote(opts.workdir)} && claude ${cont}${skipFlag} --model ${shQuote(opts.model)}`
+  const isQwen = (CLI_COMMAND || '').includes('qwen')
+  const skipFlag = isQwen ? ' --yolo' : ' --dangerously-skip-permissions'
+  const modelFlag = isQwen ? '' : ` --model ${shQuote(opts.model)}`
+  return `${path} && cd ${shQuote(opts.workdir)} && claude ${cont}${skipFlag}${modelFlag}`
 }
 
 /**

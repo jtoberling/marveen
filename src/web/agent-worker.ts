@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { resolveFromPath } from '../platform.js'
 import { logger } from '../logger.js'
 import { PROJECT_ROOT, CLI_COMMAND, LOCAL_API_BASE_URL, LOCAL_API_KEY } from '../config.js'
+import { getValidLocalModel } from './local-model-probe.js'
 import {
   capturePane,
   isSessionReadyForPrompt,
@@ -329,11 +330,13 @@ export function startWorkerSession(): void {
 
   // Detached session; launch claude via a login shell so PATH + the config-dir
   // env are set. The model suffix ([1m]) is single-quoted so it is not globbed.
+  const finalModel = (isLocal && isQwen) ? getValidLocalModel(LOCAL_API_BASE_URL, LOCAL_API_KEY, WORKER_MODEL) || WORKER_MODEL : WORKER_MODEL
+  const modelFlag = `--model ${shArg(finalModel)}`
   const launch =
     `export CLAUDE_CONFIG_DIR=${shArg(WORKER_CONFIG_DIR)}; ` +
     localEnv +
     `cd ${shArg(WORKER_HOME)} && ` +
-    `${CLAUDE_CLI} ${(CLI_COMMAND || '').includes('qwen') ? '--yolo' : '--dangerously-skip-permissions'} --model ${shArg(WORKER_MODEL)} ${localFlags}`
+    `${CLAUDE_CLI} ${isQwen ? '--yolo' : '--dangerously-skip-permissions'} ${modelFlag} ${localFlags}`
   execFileSync(TMUX, ['new-session', '-d', '-s', WORKER_SESSION, '-c', WORKER_HOME, 'bash', '-lc', launch], { timeout: 8000 })
   logger.info({ session: WORKER_SESSION, cwd: WORKER_HOME }, 'agent-worker: launched interactive worker session')
 }

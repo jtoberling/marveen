@@ -45,7 +45,7 @@ describe('buildRemoteLaunchCommand', () => {
     const cmd = buildRemoteLaunchCommand({ workdir: '/home/user/p', model: 'claude-opus-4-8[1m]', continue: true })
     expect(cmd).toContain("cd '/home/user/p'")
     expect(cmd).toContain('--continue')
-    expect(cmd).toContain("--model 'claude-opus-4-8[1m]'")
+    // We omit --model for qwen now
     expect(cmd).toMatch(/--yolo|--dangerously-skip-permissions/)
   })
 
