@@ -148,7 +148,7 @@ export function buildRemoteLaunchCommand(opts: {
 }): string {
   const path = 'export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"'
   const cont = opts.continue ? '--continue ' : ''
-  const isQwen = (CLI_COMMAND || '').includes('qwen')
+  const isQwen = CLI_COMMAND === 'qwen' || CLI_COMMAND.endsWith('qwen')
   const skipFlag = isQwen ? ' --yolo' : ' --dangerously-skip-permissions'
   const modelFlag = isQwen ? '' : ` --model ${shQuote(opts.model)}`
   const cliBin = resolveFromPath(CLI_COMMAND)
@@ -166,7 +166,7 @@ export function buildRemoteLaunchCommand(opts: {
  */
 export function buildContinueProbeCommand(absWorkdir: string): string {
   const encoded = absWorkdir.replace(/\//g, '-')
-  const isQwen = (CLI_COMMAND || '').includes('qwen')
+  const isQwen = CLI_COMMAND === 'qwen' || CLI_COMMAND.endsWith('qwen')
   const projDir = isQwen ? '$HOME/.qwen/projects' : '$HOME/.claude/projects'
   const closingQuote = '"'
   return 'test -d ' + closingQuote + projDir + '/' + closingQuote + shQuote(encoded)

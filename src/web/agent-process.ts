@@ -190,13 +190,15 @@ function startRemoteAgentProcess(
 
   const session = agentSessionName(name)
 
-  // Pre-flight: claude must be on PATH on the laptop, else the session starts
-  // and instantly dies with a silent "command not found".
+  // Pre-flight: the configured CLI must be on PATH on the remote host, else the
+  // session starts and instantly dies with a silent "command not found".
   try {
-    const probe = buildSshExec(host, 'which claude')
+    // Probe for the configured CLI (qwen or claude) on the remote host.
+    const cliOnPath = resolveFromPath(CLI_COMMAND)
+    const probe = buildSshExec(host, `which ${cliOnPath.split('/').pop()}`)
     execFileSync(probe.file, probe.args, { timeout: 8000, stdio: 'ignore' })
   } catch {
-    return { ok: false, error: `claude not found on PATH on '${host}' (or host unreachable)` }
+    return { ok: false, error: `${CLI_COMMAND} not found on PATH on '${host}' (or host unreachable)` }
   }
 
   // --continue only when the remote session dir already exists. workdir is an
